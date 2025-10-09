@@ -1,0 +1,203 @@
+--// 🌈 ESP GUI Hoàn Chỉnh by Trụoyfu x GPT-5
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+
+--==| GUI TẠO GIAO DIỆN CHÍNH |==--
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "ESP_GUI"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+local MainButton = Instance.new("TextButton")
+MainButton.Size = UDim2.new(0, 130, 0, 40)
+MainButton.Position = UDim2.new(0.5, -65, 0.85, 0)
+MainButton.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+MainButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+MainButton.Font = Enum.Font.GothamBold
+MainButton.TextSize = 16
+MainButton.Text = "ESP: OFF"
+MainButton.Parent = ScreenGui
+MainButton.Active = true
+MainButton.Draggable = true
+MainButton.AutoButtonColor = true
+MainButton.BorderSizePixel = 0
+MainButton.BackgroundTransparency = 0.2
+
+local DistanceBox = Instance.new("TextBox")
+DistanceBox.Size = UDim2.new(0, 150, 0, 35)
+DistanceBox.Position = UDim2.new(0.5, -75, 0.78, 0)
+DistanceBox.PlaceholderText = "Khoảng cách (1 - 1000)"
+DistanceBox.Text = ""
+DistanceBox.Font = Enum.Font.Gotham
+DistanceBox.TextSize = 14
+DistanceBox.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+DistanceBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+DistanceBox.Visible = false
+DistanceBox.Parent = ScreenGui
+
+--==| BIẾN TOÀN CỤC |==--
+local espEnabled = false
+local espMode = 0 -- 0 = off, 1 = limit, 2 = full
+local espDistance = 1000
+local espCache = {}
+
+--==| HÀM CẦU VỒNG |==--
+local function rainbowColor()
+	local t = tick() * 2
+	return Color3.fromHSV(t % 1, 1, 1)
+end
+
+--==| HÀM TẠO ESP CHO 1 PLAYER |==--
+local function createESP(target)
+	if target == LocalPlayer or espCache[target] then return end
+	local char = target.Character
+	if not char then return end
+
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	local hum = char:FindFirstChildOfClass("Humanoid")
+	if not hrp or not hum then return end
+
+	-- Box (hitbox cầu vồng)
+	local box = Instance.new("BoxHandleAdornment")
+	box.Size = Vector3.new(4, 6, 4)
+	box.Adornee = hrp
+	box.AlwaysOnTop = true
+	box.ZIndex = 5
+	box.Color3 = rainbowColor()
+	box.Transparency = 0.3
+	box.Parent = hrp
+
+	-- Billboard hiển thị thông tin
+	local billboard = Instance.new("BillboardGui")
+	billboard.Adornee = hrp
+	billboard.Size = UDim2.new(0, 200, 0, 50)
+	billboard.StudsOffset = Vector3.new(0, 3, 0)
+	billboard.AlwaysOnTop = true
+
+	local nameLabel = Instance.new("TextLabel", billboard)
+	nameLabel.Size = UDim2.new(1, 0, 0.5, 0)
+	nameLabel.BackgroundTransparency = 1
+	nameLabel.TextColor3 = Color3.new(1, 1, 1)
+	nameLabel.Font = Enum.Font.GothamBold
+	nameLabel.TextScaled = true
+	nameLabel.Text = "@" .. target.Name
+
+	local infoLabel = Instance.new("TextLabel", billboard)
+	infoLabel.Size = UDim2.new(1, 0, 0.5, 0)
+	infoLabel.Position = UDim2.new(0, 0, 0.5, 0)
+	infoLabel.BackgroundTransparency = 1
+	infoLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
+	infoLabel.Font = Enum.Font.Gotham
+	infoLabel.TextScaled = true
+	infoLabel.Text = "..."
+
+	billboard.Parent = hrp
+	espCache[target] = {Box = box, Billboard = billboard, Hum = hum, HRP = hrp, Info = infoLabel}
+
+	RunService.RenderStepped:Connect(function()
+		if not espEnabled or not target.Character or not hrp or not hrp:IsDescendantOf(workspace) then
+			if espCache[target] then
+				espCache[target].Box:Destroy()
+				espCache[target].Billboard:Destroy()
+				espCache[target] = nil
+			end
+			return
+		end
+
+		local dist = (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")) and
+			(LocalPlayer.Character.HumanoidRootPart.Position - hrp.Position).Magnitude or 0
+
+		if espMode == 1 and dist > espDistance then
+			box.Visible = false
+			billboard.Enabled = false
+		else
+			box.Visible = true
+			billboard.Enabled = true
+			box.Color3 = rainbowColor()
+			local tool = target.Character:FindFirstChildOfClass("Tool")
+			local toolName = tool and tool.Name or "None"
+			infoLabel.Text = string.format("📏%.0f | ❤️%.0f | 🗡️%s", dist, hum.Health, toolName)
+		end
+	end)
+end
+
+--==| HÀM TẮT ESP |==--
+local function clearESP()
+	for _, data in pairs(espCache) do
+		if data.Box then data.Box:Destroy() end
+		if data.Billboard then data.Billboard:Destroy() end
+	end
+	espCache = {}
+end
+
+--==| NÚT NHẤN |==--
+MainButton.MouseButton1Click:Connect(function()
+	if espMode == 0 then
+		espMode = 1
+		DistanceBox.Visible = true
+		MainButton.Text = "ESP: LIMIT"
+		MainButton.BackgroundColor3 = Color3.fromRGB(255, 170, 0)
+	elseif espMode == 1 then
+		espMode = 2
+		DistanceBox.Visible = false
+		MainButton.Text = "ESP: FULL"
+		MainButton.BackgroundColor3 = Color3.fromRGB(0, 255, 100)
+	elseif espMode == 2 then
+		espMode = 0
+		clearESP()
+		MainButton.Text = "ESP: OFF"
+		MainButton.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+	end
+
+	espEnabled = espMode ~= 0
+	if espEnabled then
+		for _, p in pairs(Players:GetPlayers()) do
+			createESP(p)
+		end
+	end
+end)
+
+--==| NHẬP KHOẢNG CÁCH |==--
+DistanceBox.FocusLost:Connect(function(enterPressed)
+	if enterPressed then
+		local val = tonumber(DistanceBox.Text)
+		if val and val >= 1 and val <= 1000 then
+			espDistance = val
+		else
+			espDistance = 1000
+		end
+		DistanceBox.Visible = false
+	end
+end)
+
+--==| TỰ THÊM PLAYER MỚI |==--
+Players.PlayerAdded:Connect(function(plr)
+	if espEnabled then task.wait(2) createESP(plr) end
+end)
+
+--==| RESET ESP BẰNG CHAT |==--
+LocalPlayer.Chatted:Connect(function(msg)
+	if msg:lower() == "reset" then
+		clearESP()
+		espMode = 0
+		MainButton.Text = "ESP: OFF"
+		MainButton.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+		DistanceBox.Visible = false
+	end
+end)
+
+--==| THÔNG BÁO |==--
+local Notify = Instance.new("TextLabel")
+Notify.Size = UDim2.new(0, 250, 0, 40)
+Notify.Position = UDim2.new(0.5, -125, 0.4, 0)
+Notify.BackgroundColor3 = Color3.fromRGB(0, 255, 100)
+Notify.BackgroundTransparency = 0.2
+Notify.TextColor3 = Color3.new(0, 0, 0)
+Notify.Font = Enum.Font.GothamBold
+Notify.TextSize = 18
+Notify.Text = "✅ ESP Loaded Successfully!"
+Notify.Parent = ScreenGui
+task.wait(2.5)
+Notify:Destroy()

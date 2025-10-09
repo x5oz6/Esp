@@ -1,4 +1,4 @@
---// 🌈 ESP GUI Hoàn Chỉnh by Trụoyfu x GPT-5
+--// 🌈 ESP GUI Auto Range by Trụoyfu x GPT-5
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -40,7 +40,7 @@ DistanceBox.Parent = ScreenGui
 --==| BIẾN TOÀN CỤC |==--
 local espEnabled = false
 local espMode = 0 -- 0 = off, 1 = limit, 2 = full
-local espDistance = 1000
+local espDistance = 100
 local espCache = {}
 
 --==| HÀM CẦU VỒNG |==--
@@ -49,7 +49,7 @@ local function rainbowColor()
 	return Color3.fromHSV(t % 1, 1, 1)
 end
 
---==| HÀM TẠO ESP CHO 1 PLAYER |==--
+--==| TẠO ESP |==--
 local function createESP(target)
 	if target == LocalPlayer or espCache[target] then return end
 	local char = target.Character
@@ -59,7 +59,6 @@ local function createESP(target)
 	local hum = char:FindFirstChildOfClass("Humanoid")
 	if not hrp or not hum then return end
 
-	-- Box (hitbox cầu vồng)
 	local box = Instance.new("BoxHandleAdornment")
 	box.Size = Vector3.new(4, 6, 4)
 	box.Adornee = hrp
@@ -69,7 +68,6 @@ local function createESP(target)
 	box.Transparency = 0.3
 	box.Parent = hrp
 
-	-- Billboard hiển thị thông tin
 	local billboard = Instance.new("BillboardGui")
 	billboard.Adornee = hrp
 	billboard.Size = UDim2.new(0, 200, 0, 50)
@@ -95,35 +93,19 @@ local function createESP(target)
 
 	billboard.Parent = hrp
 	espCache[target] = {Box = box, Billboard = billboard, Hum = hum, HRP = hrp, Info = infoLabel}
-
-	RunService.RenderStepped:Connect(function()
-		if not espEnabled or not target.Character or not hrp or not hrp:IsDescendantOf(workspace) then
-			if espCache[target] then
-				espCache[target].Box:Destroy()
-				espCache[target].Billboard:Destroy()
-				espCache[target] = nil
-			end
-			return
-		end
-
-		local dist = (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")) and
-			(LocalPlayer.Character.HumanoidRootPart.Position - hrp.Position).Magnitude or 0
-
-		if espMode == 1 and dist > espDistance then
-			box.Visible = false
-			billboard.Enabled = false
-		else
-			box.Visible = true
-			billboard.Enabled = true
-			box.Color3 = rainbowColor()
-			local tool = target.Character:FindFirstChildOfClass("Tool")
-			local toolName = tool and tool.Name or "None"
-			infoLabel.Text = string.format("📏%.0f | ❤️%.0f | 🗡️%s", dist, hum.Health, toolName)
-		end
-	end)
 end
 
---==| HÀM TẮT ESP |==--
+--==| XÓA ESP |==--
+local function removeESP(target)
+	if espCache[target] then
+		local data = espCache[target]
+		if data.Box then data.Box:Destroy() end
+		if data.Billboard then data.Billboard:Destroy() end
+		espCache[target] = nil
+	end
+end
+
+--==| CLEAR TẤT CẢ |==--
 local function clearESP()
 	for _, data in pairs(espCache) do
 		if data.Box then data.Box:Destroy() end
@@ -131,6 +113,42 @@ local function clearESP()
 	end
 	espCache = {}
 end
+
+--==| CẬP NHẬT TỰ ĐỘNG |==--
+RunService.RenderStepped:Connect(function()
+	if not espEnabled then return end
+	local lpChar = LocalPlayer.Character
+	if not lpChar or not lpChar:FindFirstChild("HumanoidRootPart") then return end
+	local lhrp = lpChar.HumanoidRootPart
+
+	for _, plr in pairs(Players:GetPlayers()) do
+		if plr ~= LocalPlayer and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+			local hrp = plr.Character.HumanoidRootPart
+			local dist = (lhrp.Position - hrp.Position).Magnitude
+
+			if espMode == 2 or dist <= espDistance then
+				if not espCache[plr] then
+					createESP(plr)
+				end
+			elseif espCache[plr] then
+				removeESP(plr)
+			end
+
+			if espCache[plr] then
+				local data = espCache[plr]
+				local hum = data.Hum
+				if hum and hum.Parent then
+					data.Box.Color3 = rainbowColor()
+					local tool = plr.Character:FindFirstChildOfClass("Tool")
+					local toolName = tool and tool.Name or "None"
+					data.Info.Text = string.format("📏%.0f | ❤️%.0f | 🗡️%s", dist, hum.Health, toolName)
+				else
+					removeESP(plr)
+				end
+			end
+		end
+	end
+end)
 
 --==| NÚT NHẤN |==--
 MainButton.MouseButton1Click:Connect(function()
@@ -150,13 +168,7 @@ MainButton.MouseButton1Click:Connect(function()
 		MainButton.Text = "ESP: OFF"
 		MainButton.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 	end
-
 	espEnabled = espMode ~= 0
-	if espEnabled then
-		for _, p in pairs(Players:GetPlayers()) do
-			createESP(p)
-		end
-	end
 end)
 
 --==| NHẬP KHOẢNG CÁCH |==--
@@ -166,15 +178,10 @@ DistanceBox.FocusLost:Connect(function(enterPressed)
 		if val and val >= 1 and val <= 1000 then
 			espDistance = val
 		else
-			espDistance = 1000
+			espDistance = 100
 		end
 		DistanceBox.Visible = false
 	end
-end)
-
---==| TỰ THÊM PLAYER MỚI |==--
-Players.PlayerAdded:Connect(function(plr)
-	if espEnabled then task.wait(2) createESP(plr) end
 end)
 
 --==| RESET ESP BẰNG CHAT |==--

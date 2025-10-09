@@ -1,0 +1,237 @@
+-- 📌 ESP GUI (3 chế độ + nhập khoảng cách + reset)
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+local StarterGui = game:GetService("StarterGui")
+
+-- 💡 GUI chính
+local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
+local ToggleBtn = Instance.new("TextButton", ScreenGui)
+ToggleBtn.Size = UDim2.new(0, 120, 0, 40)
+ToggleBtn.Position = UDim2.new(0, 50, 0, 50)
+ToggleBtn.Text = "ESP: OFF"
+ToggleBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+ToggleBtn.TextColor3 = Color3.new(1,1,1)
+ToggleBtn.Active = true
+ToggleBtn.Draggable = true
+
+-- 🧮 Biến trạng thái
+local ESPEnabled = false
+local FullESP = false
+local DistanceLimit = 500
+local ESPObjects = {}
+local DistanceBox
+
+-- 🌈 Hàm cầu vồng
+local function rainbowColor(t)
+	return Color3.fromHSV(t % 1, 1, 1)
+end
+
+-- 🧱 Tạo ESP cho 1 player
+local function createESP(plr)
+	if plr == LocalPlayer then return end
+	local char = plr.Character
+	if not char then return end
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	if not hrp then return end
+
+	local box = Drawing.new("Square")
+	box.Thickness = 2
+	box.Filled = false
+	box.Visible = false
+
+	local nameText = Drawing.new("Text")
+	nameText.Size = 14
+	nameText.Center = true
+	nameText.Outline = true
+	nameText.Visible = false
+
+	local distanceText = Drawing.new("Text")
+	distanceText.Size = 14
+	distanceText.Center = true
+	distanceText.Outline = true
+	distanceText.Visible = false
+
+	local toolText = Drawing.new("Text")
+	toolText.Size = 14
+	toolText.Center = true
+	toolText.Outline = true
+	toolText.Visible = false
+
+	local healthText = Drawing.new("Text")
+	healthText.Size = 14
+	healthText.Center = true
+	healthText.Outline = true
+	healthText.Visible = false
+
+	ESPObjects[plr] = {
+		box = box,
+		name = nameText,
+		dist = distanceText,
+		tool = toolText,
+		hp = healthText
+	}
+end
+
+-- 🧹 Xóa ESP
+local function removeESP(plr)
+	if ESPObjects[plr] then
+		for _, obj in pairs(ESPObjects[plr]) do
+			obj:Remove()
+		end
+		ESPObjects[plr] = nil
+	end
+end
+
+-- 🧼 Khi player rời
+Players.PlayerRemoving:Connect(removeESP)
+
+-- 🔁 Khi player mới vào
+Players.PlayerAdded:Connect(function(plr)
+	plr.CharacterAdded:Connect(function()
+		task.wait(1)
+		if ESPEnabled then
+			removeESP(plr)
+			createESP(plr)
+		end
+	end)
+end)
+
+-- 🧩 Hàm bật chế độ 1: nhập khoảng cách
+local function showDistanceInput()
+	if DistanceBox then DistanceBox:Destroy() end
+
+	DistanceBox = Instance.new("TextBox", ScreenGui)
+	DistanceBox.Size = UDim2.new(0, 150, 0, 35)
+	DistanceBox.Position = UDim2.new(0, 50, 0, 100)
+	DistanceBox.PlaceholderText = "Khoảng cách (1 - 1000)"
+	DistanceBox.Text = ""
+	DistanceBox.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+	DistanceBox.TextColor3 = Color3.new(1,1,1)
+
+	DistanceBox.FocusLost:Connect(function(enterPressed)
+		if enterPressed then
+			local num = tonumber(DistanceBox.Text)
+			if num and num >= 1 and num <= 1000 then
+				DistanceLimit = num
+				DistanceBox:Destroy()
+				DistanceBox = nil
+				StarterGui:SetCore("SendNotification", {
+					Title = "ESP",
+					Text = "Giới hạn khoảng cách: "..DistanceLimit.." stud",
+					Duration = 3
+				})
+			else
+				StarterGui:SetCore("SendNotification", {
+					Title = "ESP",
+					Text = "Vui lòng nhập số từ 1 đến 1000!",
+					Duration = 3
+				})
+			end
+		end
+	end)
+end
+
+-- 💬 Chat reset để nhập lại
+LocalPlayer.Chatted:Connect(function(msg)
+	if msg:lower() == "reset" then
+		if DistanceBox then DistanceBox:Destroy() end
+		DistanceBox = nil
+		DistanceLimit = 500
+		showDistanceInput()
+		StarterGui:SetCore("SendNotification", {
+			Title = "ESP Reset",
+			Text = "Đã cho phép nhập lại khoảng cách!",
+			Duration = 3
+		})
+	end
+end)
+
+-- 🚀 Toggle nút (3 chế độ)
+local mode = 0
+ToggleBtn.MouseButton1Click:Connect(function()
+	mode += 1
+	if mode > 3 then mode = 1 end
+
+	if mode == 1 then
+		ESPEnabled = true
+		FullESP = false
+		ToggleBtn.Text = "ESP: Limit"
+		showDistanceInput()
+	elseif mode == 2 then
+		ESPEnabled = true
+		FullESP = true
+		ToggleBtn.Text = "ESP: Full"
+	elseif mode == 3 then
+		ESPEnabled = false
+		FullESP = false
+		ToggleBtn.Text = "ESP: OFF"
+		for plr, _ in pairs(ESPObjects) do
+			removeESP(plr)
+		end
+	end
+
+	if ESPEnabled then
+		for _, plr in pairs(Players:GetPlayers()) do
+			if plr ~= LocalPlayer then
+				removeESP(plr)
+				createESP(plr)
+			end
+		end
+	end
+end)
+
+-- 🔄 Cập nhật ESP
+RunService.RenderStepped:Connect(function()
+	if not ESPEnabled then return end
+	for plr, esp in pairs(ESPObjects) do
+		local char = plr.Character
+		if char and char:FindFirstChild("HumanoidRootPart") and char:FindFirstChild("Humanoid") then
+			local hrp = char.HumanoidRootPart
+			local hum = char.Humanoid
+			local pos, onscreen = Camera:WorldToViewportPoint(hrp.Position)
+			local distance = (hrp.Position - Camera.CFrame.Position).Magnitude
+
+			if onscreen and (FullESP or distance <= DistanceLimit) then
+				local size = Vector2.new(60, 100) * (1 / (pos.Z * 0.1))
+				local topLeft = Vector2.new(pos.X - size.X / 2, pos.Y - size.Y / 2)
+				local rainbow = rainbowColor(tick())
+
+				esp.box.Size = size
+				esp.box.Position = topLeft
+				esp.box.Color = rainbow
+				esp.box.Visible = true
+
+				esp.name.Position = Vector2.new(pos.X, pos.Y - size.Y / 2 - 15)
+				esp.name.Text = "@" .. plr.Name
+				esp.name.Color = Color3.fromRGB(255, 255, 255)
+				esp.name.Visible = true
+
+				esp.dist.Position = Vector2.new(pos.X, pos.Y + size.Y / 2 + 5)
+				esp.dist.Text = string.format("📏 %.1f studs", distance)
+				esp.dist.Color = Color3.fromRGB(200, 200, 255)
+				esp.dist.Visible = true
+
+				local tool = char:FindFirstChildOfClass("Tool")
+				esp.tool.Position = Vector2.new(pos.X, pos.Y + size.Y / 2 + 25)
+				esp.tool.Text = tool and "🔪 " .. tool.Name or "❌ No Tool"
+				esp.tool.Color = Color3.fromRGB(255, 200, 100)
+				esp.tool.Visible = true
+
+				esp.hp.Position = Vector2.new(pos.X, pos.Y + size.Y / 2 + 45)
+				esp.hp.Text = string.format("❤️ %.0f HP", hum.Health)
+				esp.hp.Color = Color3.fromRGB(255, 100, 100)
+				esp.hp.Visible = true
+			else
+				for _, obj in pairs(esp) do
+					obj.Visible = false
+				end
+			end
+		else
+			removeESP(plr)
+		end
+	end
+end)
+
+StarterGui:SetCore("SendNotification", {Title="ESP", Text="ESP GUI Loaded Successfully", Duration=3})

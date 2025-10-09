@@ -1,4 +1,4 @@
--- 📌 ESP GUI (3 chế độ + nhập khoảng cách + reset)
+-- 📌 ESP GUI (3 chế độ + nhập khoảng cách + reset + fix tắt không xóa nhân vật)
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
@@ -23,7 +23,7 @@ local DistanceLimit = 500
 local ESPObjects = {}
 local DistanceBox
 
--- 🌈 Hàm cầu vồng
+-- 🌈 Cầu vồng
 local function rainbowColor(t)
 	return Color3.fromHSV(t % 1, 1, 1)
 end
@@ -35,6 +35,9 @@ local function createESP(plr)
 	if not char then return end
 	local hrp = char:FindFirstChild("HumanoidRootPart")
 	if not hrp then return end
+
+	-- Nếu đã có ESP thì không tạo lại
+	if ESPObjects[plr] then return end
 
 	local box = Drawing.new("Square")
 	box.Thickness = 2
@@ -74,17 +77,19 @@ local function createESP(plr)
 	}
 end
 
--- 🧹 Xóa ESP
+-- 🧹 Xóa ESP (chỉ Drawing, không nhân vật)
 local function removeESP(plr)
 	if ESPObjects[plr] then
 		for _, obj in pairs(ESPObjects[plr]) do
-			obj:Remove()
+			if obj.Remove then
+				pcall(function() obj:Remove() end)
+			end
 		end
 		ESPObjects[plr] = nil
 	end
 end
 
--- 🧼 Khi player rời
+-- 🧼 Khi player rời game
 Players.PlayerRemoving:Connect(removeESP)
 
 -- 🔁 Khi player mới vào
@@ -92,16 +97,14 @@ Players.PlayerAdded:Connect(function(plr)
 	plr.CharacterAdded:Connect(function()
 		task.wait(1)
 		if ESPEnabled then
-			removeESP(plr)
 			createESP(plr)
 		end
 	end)
 end)
 
--- 🧩 Hàm bật chế độ 1: nhập khoảng cách
+-- 🧩 Nhập khoảng cách
 local function showDistanceInput()
 	if DistanceBox then DistanceBox:Destroy() end
-
 	DistanceBox = Instance.new("TextBox", ScreenGui)
 	DistanceBox.Size = UDim2.new(0, 150, 0, 35)
 	DistanceBox.Position = UDim2.new(0, 50, 0, 100)
@@ -125,7 +128,7 @@ local function showDistanceInput()
 			else
 				StarterGui:SetCore("SendNotification", {
 					Title = "ESP",
-					Text = "Vui lòng nhập số từ 1 đến 1000!",
+					Text = "Nhập số từ 1 đến 1000!",
 					Duration = 3
 				})
 			end
@@ -133,7 +136,7 @@ local function showDistanceInput()
 	end)
 end
 
--- 💬 Chat reset để nhập lại
+-- 💬 Chat reset
 LocalPlayer.Chatted:Connect(function(msg)
 	if msg:lower() == "reset" then
 		if DistanceBox then DistanceBox:Destroy() end
@@ -142,13 +145,13 @@ LocalPlayer.Chatted:Connect(function(msg)
 		showDistanceInput()
 		StarterGui:SetCore("SendNotification", {
 			Title = "ESP Reset",
-			Text = "Đã cho phép nhập lại khoảng cách!",
+			Text = "Đã mở lại nhập khoảng cách!",
 			Duration = 3
 		})
 	end
 end)
 
--- 🚀 Toggle nút (3 chế độ)
+-- 🚀 Nút toggle (3 chế độ)
 local mode = 0
 ToggleBtn.MouseButton1Click:Connect(function()
 	mode += 1
@@ -167,7 +170,7 @@ ToggleBtn.MouseButton1Click:Connect(function()
 		ESPEnabled = false
 		FullESP = false
 		ToggleBtn.Text = "ESP: OFF"
-		for plr, _ in pairs(ESPObjects) do
+		for plr in pairs(ESPObjects) do
 			removeESP(plr)
 		end
 	end
@@ -175,7 +178,6 @@ ToggleBtn.MouseButton1Click:Connect(function()
 	if ESPEnabled then
 		for _, plr in pairs(Players:GetPlayers()) do
 			if plr ~= LocalPlayer then
-				removeESP(plr)
 				createESP(plr)
 			end
 		end
@@ -185,6 +187,7 @@ end)
 -- 🔄 Cập nhật ESP
 RunService.RenderStepped:Connect(function()
 	if not ESPEnabled then return end
+
 	for plr, esp in pairs(ESPObjects) do
 		local char = plr.Character
 		if char and char:FindFirstChild("HumanoidRootPart") and char:FindFirstChild("Humanoid") then
@@ -234,4 +237,8 @@ RunService.RenderStepped:Connect(function()
 	end
 end)
 
-StarterGui:SetCore("SendNotification", {Title="ESP", Text="ESP GUI Loaded Successfully", Duration=3})
+StarterGui:SetCore("SendNotification", {
+	Title = "ESP",
+	Text = "ESP GUI Loaded Successfully ✅",
+	Duration = 3
+})

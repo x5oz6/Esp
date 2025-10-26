@@ -1,0 +1,179 @@
+-- Configuration Variables
+local espTransparency = 0.2 -- Transparency of the box
+local espColor = Color3.fromRGB(255, 255, 255) -- Default color for the ESP box
+local espBorderColor = Color3.fromRGB(0, 0, 0) -- Border color for the text label
+local movementThreshold = 0.1 -- Minimum movement threshold to consider an NPC "moving"
+local refreshRate = 15 -- Time in seconds for ESP refresh
+local useRandomColors = true -- Toggle for random ESP colors
+local filteredNPCNames = { "ExcludeThisNPC", "AnotherNPCToIgnore" } -- Names of NPCs to exclude
+
+-- Table to track entities with applied ESP
+local trackedEntities = {}
+
+-- Utility Function: Calculate distance
+local function calculateDistance(pos1, pos2)
+    return (pos1 - pos2).Magnitude
+end
+
+-- Utility Function: Generate random RGB color
+local function getRandomColor()
+    return Color3.fromRGB(math.random(0, 255), math.random(0, 255), math.random(0, 255))
+end
+
+-- Utility Function: Check if an NPC is moving
+local function isMoving(npc)
+    local rootPart = npc:FindFirstChild("HumanoidRootPart")
+    if rootPart then
+        local initialPosition = rootPart.Position
+        task.wait(0.1) -- Brief delay to calculate movement
+        return (initialPosition - rootPart.Position).Magnitude > movementThreshold
+    end
+    return false
+end
+
+-- Utility Function: Validate NPC
+local function isValidNPC(obj)
+    if not obj:IsA("Model") then return false end
+    local humanoid = obj:FindFirstChildOfClass("Humanoid")
+    if not humanoid or humanoid.Health <= 0 then return false end
+    if game.Players:FindFirstChild(obj.Name) then return false end
+    for _, filteredName in ipairs(filteredNPCNames) do
+        if obj.Name == filteredName then return false end
+    end
+    return true
+end
+
+-- Create a BillboardGui for displaying NPC info
+local function createBillboardGui(part, npc)
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "ESP_Info"
+    billboard.Adornee = part
+    billboard.Size = UDim2.new(0, 100, 0, 50)
+    billboard.StudsOffset = Vector3.new(0, 3, 0) -- Positioned above the NPC's head
+    billboard.AlwaysOnTop = true
+
+    local label = Instance.new("TextLabel")
+    label.Parent = billboard
+    label.Size = UDim2.new(1, 0, 1, 0)
+    label.BackgroundTransparency = 1
+    label.TextStrokeColor3 = espBorderColor
+    label.TextStrokeTransparency = 0
+    label.Font = Enum.Font.SourceSansBold
+    label.TextSize = 14
+
+    -- Update the distance in real-time
+    game:GetService("RunService").RenderStepped:Connect(function()
+        if billboard.Parent then
+            local playerPosition = game.Players.LocalPlayer.Character
+                and game.Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                and game.Players.LocalPlayer.Character.HumanoidRootPart.Position
+            if playerPosition then
+                local distance = calculateDistance(playerPosition, part.Position)
+                label.Text = npc.Name .. " (" .. math.floor(distance) .. " studs)"
+            else
+                label.Text = npc.Name .. " (N/A studs)"
+            end
+        end
+    end)
+
+    return billboard
+end
+
+-- Add ESP to a part
+local function addPartESP(part, npc)
+    if part:IsA("BasePart") and not table.find(trackedEntities, part) then
+        local adornment = Instance.new("BoxHandleAdornment")
+        adornment.Name = "ESP_Box"
+        adornment.Parent = part
+        adornment.Adornee = part
+        adornment.AlwaysOnTop = true
+        adornment.ZIndex = 0
+        adornment.Size = part.Size + Vector3.new(0.2, 0.2, 0.2)
+        adornment.Transparency = espTransparency
+        adornment.Color3 = useRandomColors and getRandomColor() or espColor
+
+        local rootPart = npc:FindFirstChild("HumanoidRootPart")
+        if rootPart and not rootPart:FindFirstChild("ESP_Info") then
+            local billboard = createBillboardGui(rootPart, npc)
+            billboard.Parent = rootPart
+        end
+
+        -- Mark part as tracked
+        table.insert(trackedEntities, part)
+    end
+end
+
+-- Add ESP to an NPC
+local function addNPCESP(npc)
+    for _, part in ipairs(npc:GetDescendants()) do
+        if part:IsA("BasePart") then
+            addPartESP(part, npc)
+        end
+    end
+end
+
+-- Continuously update colors of ESP elements
+local function updateESPColors()
+    while true do
+        for _, part in ipairs(trackedEntities) do
+            if part:IsA("BasePart") then
+                local adornment = part:FindFirstChild("ESP_Box")
+                if adornment then
+                    adornment.Color3 = getRandomColor() -- Update to a random color
+                end
+            end
+
+            local rootPart = part.Parent and part.Parent:FindFirstChild("HumanoidRootPart")
+            if rootPart then
+                local billboard = rootPart:FindFirstChild("ESP_Info")
+                if billboard then
+                    local label = billboard:FindFirstChildOfClass("TextLabel")
+                    if label then
+                        label.TextColor3 = getRandomColor() -- Update text to a random color
+                    end
+                end
+            end
+        end
+        task.wait(1) -- Change color every 1 second
+    end
+end
+
+-- Continuously ensure ESP is applied to new NPCs
+local function ensurePermanentESP()
+    while true do
+        for _, obj in ipairs(workspace:GetDescendants()) do
+            if isValidNPC(obj) and not table.find(trackedEntities, obj) then
+                if isMoving(obj) then
+                    addNPCESP(obj) -- Add ESP only if the NPC is moving
+                end
+            end
+        end
+        task.wait(refreshRate) -- Refresh based on the configured value
+    end
+end
+
+-- Start the ESP
+local function startESP()
+    -- Apply ESP to existing NPCs
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if isValidNPC(obj) and isMoving(obj) then
+            addNPCESP(obj)
+        end
+    end
+
+    -- Detect dynamically added NPCs
+    workspace.DescendantAdded:Connect(function(newObj)
+        if isValidNPC(newObj) and isMoving(newObj) then
+            addNPCESP(newObj)
+        end
+    end)
+
+    -- Start maintaining permanent ESP
+    task.spawn(ensurePermanentESP)
+
+    -- Start the color update loop
+    task.spawn(updateESPColors)
+end
+
+-- Initialize ESP
+startESP()

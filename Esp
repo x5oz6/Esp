@@ -1,0 +1,61 @@
+local Players = game:GetService("Players")
+
+-- Função que cria o Highlight e o nome sobre a cabeça
+local function setupESP(character, player)
+    -- Remover ESP anterior para evitar duplicados
+    local oldHighlight = character:FindFirstChild("ESPHighlight")
+    if oldHighlight then oldHighlight:Destroy() end
+    local oldBillboard = character:FindFirstChild("ESPName")
+    if oldBillboard then oldBillboard:Destroy() end
+
+    -- Highlight azul-claro
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "ESPHighlight"
+    highlight.FillColor = Color3.fromRGB(0, 170, 255) -- azul-claro
+    highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+    highlight.FillTransparency = 0.5
+    highlight.Parent = character
+
+    -- BillboardGui com nome do jogador
+    local head = character:WaitForChild("Head", 10)
+    if head then
+        local billboard = Instance.new("BillboardGui")
+        billboard.Name = "ESPName"
+        billboard.Adornee = head
+        billboard.Size = UDim2.new(0,200,0,50)
+        billboard.StudsOffset = Vector3.new(0,3,0)
+        billboard.AlwaysOnTop = true
+        billboard.Parent = character
+
+        local text = Instance.new("TextLabel")
+        text.Size = UDim2.new(1,0,1,0)
+        text.BackgroundTransparency = 1
+        text.Text = player.Name
+        text.Font = Enum.Font.SourceSansBold
+        text.TextColor3 = Color3.fromRGB(0,170,255) -- azul-claro
+        text.TextStrokeTransparency = 0.2
+        text.TextScaled = true
+        text.Parent = billboard
+    end
+end
+
+-- Conectar ESP quando o personagem do player spawna
+local function onCharacterAdded(player, character)
+    setupESP(character, player)
+end
+
+-- Conectar quando novos jogadores entram
+local function onPlayerAdded(player)
+    player.CharacterAdded:Connect(function(char)
+        onCharacterAdded(player, char)
+    end)
+    if player.Character then
+        setupESP(player.Character, player)
+    end
+end
+
+-- Conexões
+Players.PlayerAdded:Connect(onPlayerAdded)
+for _, player in ipairs(Players:GetPlayers()) do
+    onPlayerAdded(player)
+end
